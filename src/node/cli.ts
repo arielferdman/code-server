@@ -22,33 +22,33 @@ export enum LogLevel {
 export class OptionalString extends Optional<string> {}
 
 export interface Args extends VsArgs {
-  readonly config?: string
-  readonly auth?: AuthType
-  readonly password?: string
-  readonly cert?: OptionalString
-  readonly "cert-key"?: string
-  readonly "disable-telemetry"?: boolean
-  readonly help?: boolean
-  readonly host?: string
-  readonly json?: boolean
+  config?: string
+  auth?: AuthType
+  password?: string
+  cert?: OptionalString
+  "cert-key"?: string
+  "disable-telemetry"?: boolean
+  help?: boolean
+  host?: string
+  json?: boolean
   log?: LogLevel
-  readonly open?: boolean
-  readonly port?: number
-  readonly "bind-addr"?: string
-  readonly socket?: string
-  readonly version?: boolean
-  readonly force?: boolean
-  readonly "list-extensions"?: boolean
-  readonly "install-extension"?: string[]
-  readonly "show-versions"?: boolean
-  readonly "uninstall-extension"?: string[]
-  readonly "proxy-domain"?: string[]
-  readonly locale?: string
-  readonly _: string[]
-  readonly "reuse-window"?: boolean
-  readonly "new-window"?: boolean
+  open?: boolean
+  port?: number
+  "bind-addr"?: string
+  socket?: string
+  version?: boolean
+  force?: boolean
+  "list-extensions"?: boolean
+  "install-extension"?: string[]
+  "show-versions"?: boolean
+  "uninstall-extension"?: string[]
+  "proxy-domain"?: string[]
+  locale?: string
+  _: string[]
+  "reuse-window"?: boolean
+  "new-window"?: boolean
 
-  readonly link?: OptionalString
+  link?: OptionalString
 }
 
 interface Option<T> {
@@ -330,8 +330,22 @@ export const parse = (
   return args
 }
 
-export async function setDefaults(args: Args): Promise<Args> {
-  args = { ...args }
+export interface DefaultedArgs extends Args {
+  auth: AuthType
+  host: string
+  port: number
+  verbose: boolean
+  "extensions-dir": string
+  "user-data-dir": string
+}
+
+/**
+ * Take CLI and config arguments (optional) and return a single set of arguments
+ * with the defaults set. Arguments from the CLI are prioritized over config
+ * arguments.
+ */
+export async function setDefaults(cliArgs: Args, configArgs: Args = { _: [] }): Promise<DefaultedArgs> {
+  const args = Object.assign(configArgs, cliArgs)
 
   if (!args["user-data-dir"]) {
     await copyOldMacOSDataDir()
@@ -381,7 +395,29 @@ export async function setDefaults(args: Args): Promise<Args> {
       break
   }
 
-  return args
+  // Default to using a password.
+  if (!args.auth) {
+    args.auth = AuthType.Password
+  }
+
+  const [host, port] = bindAddrFromAllSources(args, configArgs)
+  args.host = host
+  args.port = port
+
+  // If we're being exposed to the cloud, we listen on a random address and
+  // disable auth.
+  if (args.link) {
+    args.host = "localhost"
+    args.port = 0
+    args.socket = undefined
+    args.cert = undefined
+
+    if (args.auth !== AuthType.None) {
+      args.auth = AuthType.None
+    }
+  }
+
+  return args as DefaultedArgs
 }
 
 async function defaultConfigFile(): Promise<string> {
@@ -466,7 +502,7 @@ function bindAddrFromArgs(addr: Addr, args: Args): Addr {
   return addr
 }
 
-export function bindAddrFromAllSources(cliArgs: Args, configArgs: Args): [string, number] {
+function bindAddrFromAllSources(cliArgs: Args, configArgs: Args): [string, number] {
   let addr: Addr = {
     host: "localhost",
     port: 8080,

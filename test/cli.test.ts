@@ -20,11 +20,14 @@ describe("parser", () => {
   // values the user actually set. These are only set after explicitly calling
   // `setDefaults`.
   const defaults = {
+    auth: "password",
+    host: "localhost",
+    port: 8080,
     "extensions-dir": path.join(paths.data, "extensions"),
     "user-data-dir": paths.data,
   }
 
-  it("should set defaults", () => {
+  it("should parse nothing", () => {
     assert.deepEqual(parse([]), { _: [] })
   })
 
@@ -230,6 +233,22 @@ describe("parser", () => {
     assert.deepEqual(parse(["--proxy-domain", "*.coder.com", "--proxy-domain", "test.com"]), {
       _: [],
       "proxy-domain": ["*.coder.com", "test.com"],
+    })
+  })
+
+  it("should override with --link", async () => {
+    const args = parse(["--cert", "test", "--socket", "test", "--host", "0.0.0.0", "--port", "8888", "--link", "test"])
+    assert.deepEqual(await setDefaults(args), {
+      _: [],
+      ...defaults,
+      auth: "none",
+      host: "localhost",
+      link: {
+        value: "test",
+      },
+      port: 0,
+      cert: undefined,
+      socket: undefined,
     })
   })
 })
